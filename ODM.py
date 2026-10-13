@@ -243,6 +243,11 @@ class Model:
         cls._db = db_collection
         cls._required_vars = required_vars
         cls._admissible_vars = admissible_vars
+
+        for tag in indexes.items()
+
+
+        
         # TODO
         # Recorrer indexes y crear cada índice segun su tipo: 'unique', 'asc'
         # y 'geosphere'. Comparar el tipo por igualdad, no con el operador 'in'.
@@ -316,7 +321,28 @@ def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://local
     """
     #TODO
     # Inicializar base de datos
+    cliente = MongoClient(mongodb_uri)
+    db =cliente[db_name]
 
+    with open(definitions_path, encoding="utf-8") as model:
+        parameters = yaml.safe_load(m)
+
+    for model_name, model_info in parameters.items():
+
+        req_required = set(model_info.get("required_vars",[])),
+        req_admissible = set(model_info.get("admissible_vars",[]))  
+    
+        Model_indexes = { 
+            "unique_indexes": model_info.get("unique_indexes",[]),
+            "regular_indexes": model_info.get("regular indexes"),
+            "location_index" :model_info.get("location_index")
+
+        }
+
+        scope["MiModelo"] = type("MyModel", (Model))
+        scope["MiModelo"].init_class(db_collection=db, indexes=Model_indexes, required_vars=req_required, admissible_vars=req_admissible)
+
+    
     #TODO
     # Declarar tantas clases modelo colecciones existan en la base de datos
     # Leer el fichero de definiciones de modelos para obtener las colecciones,
@@ -336,7 +362,12 @@ if __name__ == '__main__':
     initApp()
 
     #Ejemplo
-    m = MiModelo(nombre="Pablo", apellido="Ramos", edad=18)
+    m = "MiModelo"(nombre="Pablo", apellido="Ramos", edad=18)
+    m.save()
+    m.nombre="Pedro"
+    print(m.nombre)
+
+    m = "MiModelo"(nombre="Guillermo", apellido="Ramos", edad=22, aforo=10)
     m.save()
     m.nombre="Pedro"
     print(m.nombre)
