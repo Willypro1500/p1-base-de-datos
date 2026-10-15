@@ -30,7 +30,7 @@ Recinto:
   location_index: direccion
 
   Artista:
-    required vars:
+    required_vars:
       - nombre
       - generos
     admissible_vars:
@@ -42,23 +42,24 @@ Recinto:
       - generos
 
   Evento:
-    required vars:
+    required_vars:
       - titulo
       - artistas
       - recinto
-      - fecha
+      - fecha_hora
     admissible_vars:
       - precio_zona
       - entradas_vendidas
     unique_indexes:
 
     regular_indexes:
+    - titulo
     - artistas
     - fecha_hora
     - recinto  
 
 Asistente:
-  required vars:
+  required_vars:
     - nombre
     - correo
     - fecha_alta
@@ -67,7 +68,7 @@ Asistente:
     - direccion_loc
     - preferencias_genero
   unique_indexes:
-    - email  
+    - correo
   regular_indexes:
     - nombre
     - correo

@@ -243,14 +243,20 @@ class Model:
         cls._db = db_collection
         cls._required_vars = required_vars
         cls._admissible_vars = admissible_vars
-<<<<<<< Updated upstream
-=======
 
- 
+        for campo in indexes.get("unique_indexes", []):
+            cls.db_collection.create_index(campo, unique=True)
 
+        for campo in indexes.get("regular_indexes", []):
+            cls.db_collection.create_index(campo)
+
+
+        direction_loc = indexes.get("Location_index")
+
+        if direction_loc:
+            cls.db_collection.create_idex(direction_loc, "2dSphere")
 
         
->>>>>>> Stashed changes
         # TODO
         # Recorrer indexes y crear cada índice segun su tipo: 'unique', 'asc'
         # y 'geosphere'. Comparar el tipo por igualdad, no con el operador 'in'.
@@ -324,9 +330,8 @@ def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://local
     """
     #TODO
     # Inicializar base de datos
-<<<<<<< Updated upstream
 
-=======
+
     client = MongoClient(mongodb_uri)
     db = client[db_name]
 
@@ -349,7 +354,6 @@ def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://local
         scope[model_name].init_class(db_collection=db, indexes=Model_indexes, required_vars=req_required, admissible_vars=req_admissible)
 
     
->>>>>>> Stashed changes
     #TODO
     # Declarar tantas clases modelo colecciones existan en la base de datos
     # Leer el fichero de definiciones de modelos para obtener las colecciones,
@@ -367,16 +371,12 @@ if __name__ == '__main__':
     initApp()
 
     #Ejemplo
-<<<<<<< Updated upstream
-    m = MiModelo(nombre="Pablo", apellido="Ramos", edad=18)
-=======
     m = model_name(nombre="Pablo", apellido="Ramos", edad=18)
     m.save()
     m.nombre="Pedro"
     print(m.nombre)
 
     m = model_name(nombre="Guillermo", apellido="Ramos", edad=22, aforo=10)
->>>>>>> Stashed changes
     m.save()
     m.nombre="Pedro"
     print(m.nombre)
