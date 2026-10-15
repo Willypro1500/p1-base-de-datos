@@ -105,7 +105,20 @@ class Model:
             kwargs : dict[str, str | dict]
                 diccionario con los valores de las atributos del modelo
         """
+        recibidos = set(kwargs.keys())
+
+        faltantes = self._required_vars - recibidos 
+
+        sobrantes = self._admissible_vars - recibidos 
+
+        if faltantes:
+            raise ValueError("Faltan campos obligatorios")
+
+        if sobrantes:
+             raise ValueError("Hay demasiados campos")
+
         self._data: dict[str, str | dict | list] = {}
+        self._modified_vars: set[str] = set()
         #TODO
         # Realizar las comprabociones y gestiones necesarias
         # antes de la asignacion.
@@ -115,6 +128,9 @@ class Model:
         # Utilizamos el atributo data para guardar los variables 
         # almacenadas en la base de datos en una solo atributo
         # Encapsular los datos en una sola variable facilita la 
+        super().__setattr__('_data', {})
+        super().__setattr__('_modified_vars', set())
+        
         # gestion en metodos como save.
         self._data.update(kwargs)
 
@@ -245,16 +261,16 @@ class Model:
         cls._admissible_vars = admissible_vars
 
         for campo in indexes.get("unique_indexes", []):
-            cls.db_collection.create_index(campo, unique=True)
+            cls._db.create_index(campo, unique=True)
 
         for campo in indexes.get("regular_indexes", []):
-            cls.db_collection.create_index(campo)
+            cls._db.create_index(campo)
 
 
-        direction_loc = indexes.get("Location_index")
+        direction_loc = indexes.get("location_index")
 
         if direction_loc:
-            cls.db_collection.create_idex(direction_loc, "2dSphere")
+            cls._db.create_index(direction_loc, "2dSphere")
 
         
         # TODO
@@ -351,7 +367,7 @@ def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://local
         }
 
         scope[model_name] = type(model_name, (Model,),{})
-        scope[model_name].init_class(db_collection=db, indexes=Model_indexes, required_vars=req_required, admissible_vars=req_admissible)
+        scope[model_name].init_class(db_collection=db[model_name], indexes=Model_indexes, required_vars=req_required, admissible_vars=req_admissible)
 
     
     #TODO
