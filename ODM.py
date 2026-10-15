@@ -243,6 +243,14 @@ class Model:
         cls._db = db_collection
         cls._required_vars = required_vars
         cls._admissible_vars = admissible_vars
+<<<<<<< Updated upstream
+=======
+
+ 
+
+
+        
+>>>>>>> Stashed changes
         # TODO
         # Recorrer indexes y crear cada índice segun su tipo: 'unique', 'asc'
         # y 'geosphere'. Comparar el tipo por igualdad, no con el operador 'in'.
@@ -316,18 +324,41 @@ def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://local
     """
     #TODO
     # Inicializar base de datos
+<<<<<<< Updated upstream
 
+=======
+    client = MongoClient(mongodb_uri)
+    db = client[db_name]
+
+    with open(definitions_path, encoding="utf-8") as model:
+        parameters = yaml.safe_load(model)
+
+    for model_name, model_info in parameters.items():
+
+        req_required = set(model_info.get("required_vars",[]))
+        req_admissible = set(model_info.get("admissible_vars",[]))  
+    
+        Model_indexes = { 
+            "unique_indexes": model_info.get("unique_indexes",[]),
+            "regular_indexes": model_info.get("regular_indexes", []),
+            "location_index" :model_info.get("location_index")
+
+        }
+
+        scope[model_name] = type(model_name, (Model,),{})
+        scope[model_name].init_class(db_collection=db, indexes=Model_indexes, required_vars=req_required, admissible_vars=req_admissible)
+
+    
+>>>>>>> Stashed changes
     #TODO
     # Declarar tantas clases modelo colecciones existan en la base de datos
     # Leer el fichero de definiciones de modelos para obtener las colecciones,
     # indices y los atributos admitidos y requeridos para cada una de ellas.
     # Ejemplo de declaracion de modelo para colecion llamada MiModelo
-    scope["MiModelo"] = type("MiModelo", (Model,),{})
     # La clase se declara en tiempo de ejecucion y queda en scope, que no tiene
     # por que ser el espacio de nombres global: las pruebas le pasan su propio
     # diccionario. Por eso se inicializa a traves de scope y no por su nombre,
     # que ahi todavia no existe.
-    scope["MiModelo"].init_class(db_collection=None, indexes=None, required_vars=None, admissible_vars=None)
 
 if __name__ == '__main__':
     
@@ -336,7 +367,16 @@ if __name__ == '__main__':
     initApp()
 
     #Ejemplo
+<<<<<<< Updated upstream
     m = MiModelo(nombre="Pablo", apellido="Ramos", edad=18)
+=======
+    m = model_name(nombre="Pablo", apellido="Ramos", edad=18)
+    m.save()
+    m.nombre="Pedro"
+    print(m.nombre)
+
+    m = model_name(nombre="Guillermo", apellido="Ramos", edad=22, aforo=10)
+>>>>>>> Stashed changes
     m.save()
     m.nombre="Pedro"
     print(m.nombre)
