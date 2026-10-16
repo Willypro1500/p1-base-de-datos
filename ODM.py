@@ -109,13 +109,14 @@ class Model:
 
         faltantes = self._required_vars - recibidos 
 
-        sobrantes = self._admissible_vars - recibidos 
+        validos = self._admissible_vars | self._required_vars | {"_id"}
+        sobrantes = recibidos - validos
 
         if faltantes:
-            raise ValueError("Faltan campos obligatorios")
+            raise ValueError("Faltan campos obligatorios: {faltantes}")
 
         if sobrantes:
-             raise ValueError("Hay demasiados campos")
+             raise ValueError("Hay campos no admitidos: {sobrantes}")
 
         self._data: dict[str, str | dict | list] = {}
         self._modified_vars: set[str] = set()
@@ -146,8 +147,14 @@ class Model:
         # Realizar las comprabociones y gestiones necesarias
         # antes de la asignacion.
 
+        validos = self._admissible_vars | self._admissible_vars | {"_id"}
+
+        if name not in validos:
+            raise ValueError("El campo  no es valido")
+
         # Asigna el valor value a la variable name
         self._data[name] = value
+        self._modified_vars.add(name)
 
     def __getattr__(self, name: str) -> Any:
         """ Sobreescribe el metodo de acceso a atributos del objeto
@@ -170,14 +177,36 @@ class Model:
         modelo.
         """
         #TODO
-        pass #No olvidar eliminar esta linea una vez implementado
+        if "_id" not in self._data:
+            if self._location_var and "direccion" in self._data:
+                self._data[self._location_var] = getLocationPoint(self._data["direccion"])
+            
+            result = self._db.insert_one(self._data)
+            self._data["_id"] = result.inserted_id
+            self._modified_vars.clear()
+            return
+
+        if self._modified_vars:
+            if "direccion" in self._modified_vars and self._location_var:
+                self._data[self._location_var] = getLocationPoint(self._data["direccion"])
+                self._modified_vars.add(self._location_var)
+
+            cambios = {}
+            for k in self._modified_vars:
+                cambios[k] = self._data[k]
+
+            self._db.update_one({"_id": self._data["_id"]}, {"$set": cambios})
+            self._modified_vars.clear()
 
     def delete(self) -> None:
         """
         Elimina el modelo de la base de datos
         """
         #TODO
-        pass
+        if "_id" in self._data:
+            id_doc = self._data["_id"]
+            self._db.delete_one({"_id": id_doc})
+            del self._data["_id"]
     
     @classmethod
     def find(cls, filter: dict[str, str | dict]) -> Any:
@@ -197,7 +226,8 @@ class Model:
         """ 
         #TODO
         # cls es el puntero a la clase
-        pass #No olvidar eliminar esta linea una vez implementado
+        cursor_mongo = cls._db.find(filter)
+        return ModelCursor(cls, cursor_mongo)
 
     @classmethod
     def aggregate(cls, pipeline: list[dict]) -> pymongo.command_cursor.CommandCursor:
@@ -260,18 +290,6 @@ class Model:
         cls._required_vars = required_vars
         cls._admissible_vars = admissible_vars
 
-        for campo in indexes.get("unique_indexes", []):
-            cls._db.create_index(campo, unique=True)
-
-        for campo in indexes.get("regular_indexes", []):
-            cls._db.create_index(campo)
-
-
-        direction_loc = indexes.get("location_index")
-
-        if direction_loc:
-            cls._db.create_index(direction_loc, "2dSphere")
-
         
         # TODO
         # Recorrer indexes y crear cada índice segun su tipo: 'unique', 'asc'
@@ -279,6 +297,17 @@ class Model:
         # Ojo con el índice geoespacial: save() guarda el GeoJSON Point en
         # <campo>_loc, luego el índice 2dsphere va sobre <campo>_loc, mientras
         # que _location_var debe guardar el nombre del campo base.
+        for campo in indexes.get("unique_indexes", []):
+            cls._db.create_index(campo, unique=True)
+        
+        for campo in indexes.get("regular_indexes", []):
+            cls._db.create_index(campo)
+        
+        
+        direction_loc = indexes.get("location_index")
+        
+        if direction_loc:
+            cls._db.create_index(direction_loc, "2dsphere")
 
 
 class ModelCursor:
@@ -324,7 +353,6 @@ class ModelCursor:
         Utilizar alive para comprobar si existen mas documentos.
         """
         #TODO
-        pass #No olvidar eliminar esta linea una vez implementado
 
 
 def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://localhost:27017/", db_name="abd", scope=globals()) -> None:
