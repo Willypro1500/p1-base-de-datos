@@ -301,11 +301,18 @@ class Model:
         # Ojo con el índice geoespacial: save() guarda el GeoJSON Point en
         # <campo>_loc, luego el índice 2dsphere va sobre <campo>_loc, mientras
         # que _location_var debe guardar el nombre del campo base.
-        for campo in indexes.get("unique_indexes", []):
-            cls._db.create_index(campo, unique=True)
-        
-        for campo in indexes.get("regular_indexes", []):
-            cls._db.create_index(campo)
+        for campo in (indexes.get("unique_indexes") or []):
+            try:
+                cls._db.create_index([(campo, 1)], unique=True)
+            except Exception:
+                pass
+
+        for campo in (indexes.get("regular_indexes") or []):
+            try:
+                cls._db.create_index([(campo, 1)])
+            except Exception:
+                 pass
+
         
         direction_loc = indexes.get("location_index")
         
@@ -414,34 +421,80 @@ def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://local
 
 if __name__ == '__main__':
     
-    # Inicializar base de datos y modelos con initApp
+   # Inicializar base de datos y modelos con initApp
     #TODO
-    initApp()
+    initApp(definitions_path="./models.yml", db_name="envivo", scope=globals())
 
-    #Ejemplo
-    m = MiModelo(nombre="Pablo", apellido="Ramos", edad=18)
-    m.save()
-    m.nombre="Pedro"
-    print(m.nombre)
+    # Acceso a los modelos definidos en models.yml
+    Recinto = globals()["Recinto"]
+    Artista = globals()["Artista"]
+    Evento = globals()["Evento"]
+    Asistente = globals()["Asistente"]
 
     # Hacer pruebas para comprobar que funciona correctamente el modelo
     #TODO
     # Crear modelo
+    m = Artista(nombre="Rosalia", generos=["Flamenco", "Urbano"], nacionalidad="España", inicio=2013)
 
     # Asignar nuevo valor a variable admitida del objeto 
+    m.nombre = "Rosalia Vila"
 
     # Asignar nuevo valor a variable no admitida del objeto 
+    try:
+        m.campo_no_valido = "invalido"
+    except (ValueError, AttributeError):
+        print("Atributo no admitido rechazado correctamente.")
 
     # Guardar
+    m.save()
 
     # Asignar nuevo valor a variable admitida del objeto
+    m.inicio = 2015
 
     # Guardar
+    m.save()
 
     # Buscar nuevo documento con find
+    cursor = Artista.find({"nombre": "Rosalia Vila"})
 
     # Obtener primer documento
+    primer_doc = next(iter(cursor), None)
 
     # Modificar valor de variable admitida
-
+    if primer_doc:
+        primer_doc.nombre = "Rosalia"
     # Guardar
+        primer_doc.save()
+
+    #Rellenar colecciones enVivo
+    Artista(
+        nombre="Bad Bunny",
+        generos=["Trap", "Reggaeton"],
+        nacionalidad="Puerto Rico",
+        inicio=2016
+    ).save()
+
+    Recinto(
+        nombre="WiZink Center",
+        direccion="Avenida Felipe II, s/n, 28009 Madrid",
+        aforo=17453,
+        zonas={"pista": 5000, "grada": 12453}
+    ).save()
+
+    Evento(
+        titulo="Concierto Wizink",
+        artistas=["Rosalia", "Bad Bunny"],
+        recinto="WiZink Center",
+        fecha_hora="2026-11-20T21:00:00",
+        precio_zona={"pista": 75.0, "grada": 55.0}
+    ).save()
+
+    Asistente(
+        nombre="Guillermo Perez",
+        correo="Guillermo@ejemplo.com",
+        fecha_alta="2026-01-15",
+        direccion="Calle Gran Via, 28, Madrid",
+        preferencias_genero=["Flamenco", "Trap"]
+    ).save()
+
+    print("Base de datos poblada con éxito.")

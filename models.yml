@@ -34,8 +34,8 @@ Artista:
       - nombre
       - generos
     admissible_vars:
-      - Nacionalidad
-      - Inicio
+      - nacionalidad
+      - inicio
     unique_indexes:
       - nombre
     regular_indexes:
@@ -50,7 +50,7 @@ Evento:
     admissible_vars:
       - precio_zona
       - entradas_vendidas
-    unique_indexes:
+    unique_indexes: []
 
     regular_indexes:
     - titulo
