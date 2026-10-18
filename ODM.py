@@ -48,6 +48,10 @@ def getLocationPoint(address: str) -> Point:
     # Si no se consiguieron coordenadas, lanzar ValueError: la funcion no puede
     # devolver un punto inventado ni None silenciosamente. Es lo que espera la
     # prueba test_get_location_point_timeout_failure.
+    if location is None:
+        raise ValueError("No se pudieron obtener coordenadas")
+
+    return Point((location.longitude, location.latitude))
 
 class Model:
     """ 
@@ -147,7 +151,7 @@ class Model:
         # Realizar las comprabociones y gestiones necesarias
         # antes de la asignacion.
 
-        validos = self._admissible_vars | self._admissible_vars | {"_id"}
+        validos = self._admissible_vars | self._required_vars | {"_id"}
 
         if name not in validos:
             raise ValueError("El campo  no es valido")
@@ -303,11 +307,14 @@ class Model:
         for campo in indexes.get("regular_indexes", []):
             cls._db.create_index(campo)
         
-        
         direction_loc = indexes.get("location_index")
         
+        # 1. Guardar el nombre del campo base en el atributo de clase
+        cls._location_var = direction_loc
+        
+        # 2. Crear el índice 2dsphere sobre <campo>_loc en MongoDB
         if direction_loc:
-            cls._db.create_index(direction_loc, "2dsphere")
+            cls._db.create_index([(f"{direction_loc}_loc", "2dsphere")])
 
 
 class ModelCursor:
@@ -353,6 +360,12 @@ class ModelCursor:
         Utilizar alive para comprobar si existen mas documentos.
         """
         #TODO
+        while self.cursor.alive:
+            try:
+                documento = self.cursor.next()
+                yield self.model(**documento)
+            except StopIteration:
+                break
 
 
 def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://localhost:27017/", db_name="abd", scope=globals()) -> None:
@@ -397,16 +410,7 @@ def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://local
         scope[model_name] = type(model_name, (Model,),{})
         scope[model_name].init_class(db_collection=db[model_name], indexes=Model_indexes, required_vars=req_required, admissible_vars=req_admissible)
 
-    
-    #TODO
-    # Declarar tantas clases modelo colecciones existan en la base de datos
-    # Leer el fichero de definiciones de modelos para obtener las colecciones,
-    # indices y los atributos admitidos y requeridos para cada una de ellas.
-    # Ejemplo de declaracion de modelo para colecion llamada MiModelo
-    # La clase se declara en tiempo de ejecucion y queda en scope, que no tiene
-    # por que ser el espacio de nombres global: las pruebas le pasan su propio
-    # diccionario. Por eso se inicializa a traves de scope y no por su nombre,
-    # que ahi todavia no existe.
+
 
 if __name__ == '__main__':
     
@@ -415,12 +419,7 @@ if __name__ == '__main__':
     initApp()
 
     #Ejemplo
-    m = model_name(nombre="Pablo", apellido="Ramos", edad=18)
-    m.save()
-    m.nombre="Pedro"
-    print(m.nombre)
-
-    m = model_name(nombre="Guillermo", apellido="Ramos", edad=22, aforo=10)
+    m = MiModelo(nombre="Pablo", apellido="Ramos", edad=18)
     m.save()
     m.nombre="Pedro"
     print(m.nombre)
