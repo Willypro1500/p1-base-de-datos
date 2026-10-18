@@ -48,6 +48,10 @@ def getLocationPoint(address: str) -> Point:
     # Si no se consiguieron coordenadas, lanzar ValueError: la funcion no puede
     # devolver un punto inventado ni None silenciosamente. Es lo que espera la
     # prueba test_get_location_point_timeout_failure.
+    if location is None:
+        raise ValueError("No se pudieron obtener coordenadas")
+
+    return Point((location.longitude, location.latitude))
 
 class Model:
     """ 
@@ -105,7 +109,21 @@ class Model:
             kwargs : dict[str, str | dict]
                 diccionario con los valores de las atributos del modelo
         """
+        recibidos = set(kwargs.keys())
+
+        faltantes = self._required_vars - recibidos 
+
+        validos = self._admissible_vars | self._required_vars | {"_id"}
+        sobrantes = recibidos - validos
+
+        if faltantes:
+            raise ValueError("Faltan campos obligatorios: {faltantes}")
+
+        if sobrantes:
+             raise ValueError("Hay campos no admitidos: {sobrantes}")
+
         self._data: dict[str, str | dict | list] = {}
+        self._modified_vars: set[str] = set()
         #TODO
         # Realizar las comprabociones y gestiones necesarias
         # antes de la asignacion.
@@ -115,6 +133,9 @@ class Model:
         # Utilizamos el atributo data para guardar los variables 
         # almacenadas en la base de datos en una solo atributo
         # Encapsular los datos en una sola variable facilita la 
+        super().__setattr__('_data', {})
+        super().__setattr__('_modified_vars', set())
+        
         # gestion en metodos como save.
         self._data.update(kwargs)
 
@@ -130,8 +151,14 @@ class Model:
         # Realizar las comprabociones y gestiones necesarias
         # antes de la asignacion.
 
+        validos = self._admissible_vars | self._required_vars | {"_id"}
+
+        if name not in validos:
+            raise ValueError("El campo  no es valido")
+
         # Asigna el valor value a la variable name
         self._data[name] = value
+        self._modified_vars.add(name)
 
     def __getattr__(self, name: str) -> Any:
         """ Sobreescribe el metodo de acceso a atributos del objeto
@@ -154,14 +181,36 @@ class Model:
         modelo.
         """
         #TODO
-        pass #No olvidar eliminar esta linea una vez implementado
+        if "_id" not in self._data:
+            if self._location_var and "direccion" in self._data:
+                self._data[self._location_var] = getLocationPoint(self._data["direccion"])
+            
+            result = self._db.insert_one(self._data)
+            self._data["_id"] = result.inserted_id
+            self._modified_vars.clear()
+            return
+
+        if self._modified_vars:
+            if "direccion" in self._modified_vars and self._location_var:
+                self._data[self._location_var] = getLocationPoint(self._data["direccion"])
+                self._modified_vars.add(self._location_var)
+
+            cambios = {}
+            for k in self._modified_vars:
+                cambios[k] = self._data[k]
+
+            self._db.update_one({"_id": self._data["_id"]}, {"$set": cambios})
+            self._modified_vars.clear()
 
     def delete(self) -> None:
         """
         Elimina el modelo de la base de datos
         """
         #TODO
-        pass
+        if "_id" in self._data:
+            id_doc = self._data["_id"]
+            self._db.delete_one({"_id": id_doc})
+            del self._data["_id"]
     
     @classmethod
     def find(cls, filter: dict[str, str | dict]) -> Any:
@@ -181,7 +230,8 @@ class Model:
         """ 
         #TODO
         # cls es el puntero a la clase
-        pass #No olvidar eliminar esta linea una vez implementado
+        cursor_mongo = cls._db.find(filter)
+        return ModelCursor(cls, cursor_mongo)
 
     @classmethod
     def aggregate(cls, pipeline: list[dict]) -> pymongo.command_cursor.CommandCursor:
@@ -244,9 +294,6 @@ class Model:
         cls._required_vars = required_vars
         cls._admissible_vars = admissible_vars
 
-        for tag in indexes.items()
-
-
         
         # TODO
         # Recorrer indexes y crear cada índice segun su tipo: 'unique', 'asc'
@@ -254,6 +301,27 @@ class Model:
         # Ojo con el índice geoespacial: save() guarda el GeoJSON Point en
         # <campo>_loc, luego el índice 2dsphere va sobre <campo>_loc, mientras
         # que _location_var debe guardar el nombre del campo base.
+        for campo in (indexes.get("unique_indexes") or []):
+            try:
+                cls._db.create_index([(campo, 1)], unique=True)
+            except Exception:
+                pass
+
+        for campo in (indexes.get("regular_indexes") or []):
+            try:
+                cls._db.create_index([(campo, 1)])
+            except Exception:
+                 pass
+
+        
+        direction_loc = indexes.get("location_index")
+        
+        # 1. Guardar el nombre del campo base en el atributo de clase
+        cls._location_var = direction_loc
+        
+        # 2. Crear el índice 2dsphere sobre <campo>_loc en MongoDB
+        if direction_loc:
+            cls._db.create_index([(f"{direction_loc}_loc", "2dsphere")])
 
 
 class ModelCursor:
@@ -299,7 +367,12 @@ class ModelCursor:
         Utilizar alive para comprobar si existen mas documentos.
         """
         #TODO
-        pass #No olvidar eliminar esta linea una vez implementado
+        while self.cursor.alive:
+            try:
+                documento = self.cursor.next()
+                yield self.model(**documento)
+            except StopIteration:
+                break
 
 
 def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://localhost:27017/", db_name="abd", scope=globals()) -> None:
@@ -321,75 +394,107 @@ def initApp(definitions_path: str = "./models.yml", mongodb_uri="mongodb://local
     """
     #TODO
     # Inicializar base de datos
-    cliente = MongoClient(mongodb_uri)
-    db =cliente[db_name]
+
+
+    client = MongoClient(mongodb_uri)
+    db = client[db_name]
 
     with open(definitions_path, encoding="utf-8") as model:
-        parameters = yaml.safe_load(m)
+        parameters = yaml.safe_load(model)
 
     for model_name, model_info in parameters.items():
 
-        req_required = set(model_info.get("required_vars",[])),
+        req_required = set(model_info.get("required_vars",[]))
         req_admissible = set(model_info.get("admissible_vars",[]))  
     
         Model_indexes = { 
             "unique_indexes": model_info.get("unique_indexes",[]),
-            "regular_indexes": model_info.get("regular indexes"),
+            "regular_indexes": model_info.get("regular_indexes", []),
             "location_index" :model_info.get("location_index")
 
         }
 
-        scope["MiModelo"] = type("MyModel", (Model))
-        scope["MiModelo"].init_class(db_collection=db, indexes=Model_indexes, required_vars=req_required, admissible_vars=req_admissible)
+        scope[model_name] = type(model_name, (Model,),{})
+        scope[model_name].init_class(db_collection=db[model_name], indexes=Model_indexes, required_vars=req_required, admissible_vars=req_admissible)
 
-    
-    #TODO
-    # Declarar tantas clases modelo colecciones existan en la base de datos
-    # Leer el fichero de definiciones de modelos para obtener las colecciones,
-    # indices y los atributos admitidos y requeridos para cada una de ellas.
-    # Ejemplo de declaracion de modelo para colecion llamada MiModelo
-    scope["MiModelo"] = type("MiModelo", (Model,),{})
-    # La clase se declara en tiempo de ejecucion y queda en scope, que no tiene
-    # por que ser el espacio de nombres global: las pruebas le pasan su propio
-    # diccionario. Por eso se inicializa a traves de scope y no por su nombre,
-    # que ahi todavia no existe.
-    scope["MiModelo"].init_class(db_collection=None, indexes=None, required_vars=None, admissible_vars=None)
+
 
 if __name__ == '__main__':
     
-    # Inicializar base de datos y modelos con initApp
+   # Inicializar base de datos y modelos con initApp
     #TODO
-    initApp()
+    initApp(definitions_path="./models.yml", db_name="envivo", scope=globals())
 
-    #Ejemplo
-    m = "MiModelo"(nombre="Pablo", apellido="Ramos", edad=18)
-    m.save()
-    m.nombre="Pedro"
-    print(m.nombre)
-
-    m = "MiModelo"(nombre="Guillermo", apellido="Ramos", edad=22, aforo=10)
-    m.save()
-    m.nombre="Pedro"
-    print(m.nombre)
+    # Acceso a los modelos definidos en models.yml
+    Recinto = globals()["Recinto"]
+    Artista = globals()["Artista"]
+    Evento = globals()["Evento"]
+    Asistente = globals()["Asistente"]
 
     # Hacer pruebas para comprobar que funciona correctamente el modelo
     #TODO
     # Crear modelo
+    m = Artista(nombre="Rosalia", generos=["Flamenco", "Urbano"], nacionalidad="España", inicio=2013)
 
     # Asignar nuevo valor a variable admitida del objeto 
+    m.nombre = "Rosalia Vila"
 
     # Asignar nuevo valor a variable no admitida del objeto 
+    try:
+        m.campo_no_valido = "invalido"
+    except (ValueError, AttributeError):
+        print("Atributo no admitido rechazado correctamente.")
 
     # Guardar
+    m.save()
 
     # Asignar nuevo valor a variable admitida del objeto
+    m.inicio = 2015
 
     # Guardar
+    m.save()
 
     # Buscar nuevo documento con find
+    cursor = Artista.find({"nombre": "Rosalia Vila"})
 
     # Obtener primer documento
+    primer_doc = next(iter(cursor), None)
 
     # Modificar valor de variable admitida
-
+    if primer_doc:
+        primer_doc.nombre = "Rosalia"
     # Guardar
+        primer_doc.save()
+
+    #Rellenar colecciones enVivo
+    Artista(
+        nombre="Bad Bunny",
+        generos=["Trap", "Reggaeton"],
+        nacionalidad="Puerto Rico",
+        inicio=2016
+    ).save()
+
+    Recinto(
+        nombre="WiZink Center",
+        direccion="Avenida Felipe II, s/n, 28009 Madrid",
+        aforo=17453,
+        zonas={"pista": 5000, "grada": 12453}
+    ).save()
+
+    Evento(
+        titulo="Concierto Wizink",
+        artistas=["Rosalia", "Bad Bunny"],
+        recinto="WiZink Center",
+        fecha_hora="2026-11-20T21:00:00",
+        precio_zona={"pista": 75.0, "grada": 55.0}
+    ).save()
+
+    Asistente(
+        nombre="Guillermo Perez",
+        correo="Guillermo@ejemplo.com",
+        fecha_alta="2026-01-15",
+        direccion="Calle Gran Via, 28, Madrid",
+        preferencias_genero=["Flamenco", "Trap"]
+    ).save()
+
+    print("Base de datos poblada con éxito.")
